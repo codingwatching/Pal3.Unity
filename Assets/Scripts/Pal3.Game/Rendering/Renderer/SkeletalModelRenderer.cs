@@ -60,7 +60,7 @@ namespace Pal3.Game.Rendering.Renderer
                 FrameTicks = new uint[track.KeyFrames.Length];
             }
 
-            for (var i = 0; i < track.KeyFrames.Length; i++)
+            for (int i = 0; i < track.KeyFrames.Length; i++)
             {
                 FrameTicks[i] = track.KeyFrames[i].KeySeconds.SecondsToGameBoxTick();
             }
@@ -180,25 +180,34 @@ namespace Pal3.Game.Rendering.Renderer
         private IEnumerator PlayAnimationInternalAsync(int loopCount,
             CancellationToken cancellationToken)
         {
-            if (loopCount == -1) // Infinite loop until cancelled
+            switch (loopCount)
             {
-                while (!cancellationToken.IsCancellationRequested)
+                // Infinite loop until cancelled
+                case -1:
                 {
-                    yield return PlayOneTimeAnimationInternalAsync(cancellationToken);
+                    while (!cancellationToken.IsCancellationRequested)
+                    {
+                        yield return PlayOneTimeAnimationInternalAsync(cancellationToken);
+                    }
+
+                    break;
                 }
-            }
-            else if (loopCount > 0)
-            {
-                while (!cancellationToken.IsCancellationRequested && --loopCount >= 0)
+                // Finite loop
+                case > 0:
                 {
-                    yield return PlayOneTimeAnimationInternalAsync(cancellationToken);
+                    while (!cancellationToken.IsCancellationRequested && --loopCount >= 0)
+                    {
+                        yield return PlayOneTimeAnimationInternalAsync(cancellationToken);
+                    }
+
+                    break;
                 }
             }
         }
 
         private IEnumerator PlayOneTimeAnimationInternalAsync(CancellationToken cancellationToken)
         {
-            var startTime = GameTimeProvider.Instance.TimeSinceStartup;
+            double startTime = GameTimeProvider.Instance.TimeSinceStartup;
 
             while (!cancellationToken.IsCancellationRequested)
             {
@@ -242,7 +251,7 @@ namespace Pal3.Game.Rendering.Renderer
             {
                 int currentFrameIndex = CoreUtility.GetFloorIndex(bone.FrameTicks, tick);
                 uint currentFrameTick = bone.FrameTicks[currentFrameIndex];
-                var nextFrameIndex = currentFrameIndex < bone.FrameTicks.Length - 1 ? currentFrameIndex + 1 : 0;
+                int nextFrameIndex = currentFrameIndex < bone.FrameTicks.Length - 1 ? currentFrameIndex + 1 : 0;
                 uint nextFrameTick = bone.FrameTicks[nextFrameIndex];
 
                 float influence = 1f;
@@ -274,7 +283,7 @@ namespace Pal3.Game.Rendering.Renderer
             }
 
             // Update children
-            for (var i = 0; i < boneNode.Children.Length; i++)
+            for (int i = 0; i < boneNode.Children.Length; i++)
             {
                 Bone childBone = _bones[boneNode.Children[i].Id];
                 UpdateBone(childBone, tick);
@@ -336,7 +345,7 @@ namespace Pal3.Game.Rendering.Renderer
                 _allVerticesBuffer = new Vector3[_mshFile.SubMeshes.Length][];
             }
 
-            for (var i = 0; i < _mshFile.SubMeshes.Length; i++)
+            for (int i = 0; i < _mshFile.SubMeshes.Length; i++)
             {
                 MshMesh subMesh = _mshFile.SubMeshes[i];
                 RenderSubMesh(subMesh, i);
@@ -371,10 +380,10 @@ namespace Pal3.Game.Rendering.Renderer
                 _allVerticesBuffer[subMeshIndex] = new Vector3[subMesh.Vertices.Length];
             }
 
-            var index = 0;
+            int index = 0;
             foreach (PhyFace phyFace in subMesh.Faces)
             {
-                for (var i = 0; i < phyFace.Indices.Length; i++)
+                for (int i = 0; i < phyFace.Indices.Length; i++)
                 {
                     _indexBuffer[subMeshIndex][index] = phyFace.Indices[i];
                     renderMeshComponent.MeshDataBuffer.UvBuffer[index].x = phyFace.U[i, 0];
@@ -386,7 +395,7 @@ namespace Pal3.Game.Rendering.Renderer
 
             renderMeshComponent.MeshDataBuffer.TriangleBuffer.ToUnityTrianglesInPlace();
 
-            for (var i = 0; i < numOfIndices; i++)
+            for (int i = 0; i < numOfIndices; i++)
             {
                 renderMeshComponent.MeshDataBuffer.VertexBuffer[i] =
                     subMesh.Vertices[_indexBuffer[subMeshIndex][i]].GameBoxPosition.ToUnityPosition();
@@ -399,7 +408,7 @@ namespace Pal3.Game.Rendering.Renderer
                 tintColor: _tintColor,
                 blendFlag: GameBoxBlendFlag.Opaque);
 
-            var meshRenderer = _meshEntities[subMeshIndex].AddComponent<StaticMeshRenderer>();
+            StaticMeshRenderer meshRenderer = _meshEntities[subMeshIndex].AddComponent<StaticMeshRenderer>();
             Mesh renderMesh = meshRenderer.Render(
                 vertices: renderMeshComponent.MeshDataBuffer.VertexBuffer,
                 triangles: renderMeshComponent.MeshDataBuffer.TriangleBuffer,
@@ -422,7 +431,7 @@ namespace Pal3.Game.Rendering.Renderer
             MshMesh subMesh = _mshFile.SubMeshes[subMeshIndex];
             Vector3[] allVertices = _allVerticesBuffer[subMeshIndex];
 
-            for (var i = 0; i < subMesh.Vertices.Length; i++)
+            for (int i = 0; i < subMesh.Vertices.Length; i++)
             {
                 PhyVertex vert = subMesh.Vertices[i];
 
@@ -438,7 +447,7 @@ namespace Pal3.Game.Rendering.Renderer
                 allVertices[i].z = currentPosition.z / currentPosition.w;
             }
 
-            for (var i = 0; i < _indexBuffer[subMeshIndex].Length; i++)
+            for (int i = 0; i < _indexBuffer[subMeshIndex].Length; i++)
             {
                 _renderMeshComponents[subMeshIndex].MeshDataBuffer.VertexBuffer[i] =
                     allVertices[_indexBuffer[subMeshIndex][i]];
@@ -452,7 +461,7 @@ namespace Pal3.Game.Rendering.Renderer
                 return new Bounds(Transform.Position, Vector3.one);
             }
             Bounds bounds = _renderMeshComponents[0].MeshRenderer.GetRendererBounds();
-            for (var i = 1; i < _renderMeshComponents.Length; i++)
+            for (int i = 1; i < _renderMeshComponents.Length; i++)
             {
                 bounds.Encapsulate(_renderMeshComponents[i].MeshRenderer.GetRendererBounds());
             }
@@ -466,7 +475,7 @@ namespace Pal3.Game.Rendering.Renderer
                 return new Bounds(Vector3.zero, Vector3.one);
             }
             Bounds bounds = _renderMeshComponents[0].MeshRenderer.GetMeshBounds();
-            for (var i = 1; i < _renderMeshComponents.Length; i++)
+            for (int i = 1; i < _renderMeshComponents.Length; i++)
             {
                 bounds.Encapsulate(_renderMeshComponents[i].MeshRenderer.GetMeshBounds());
             }

@@ -186,13 +186,11 @@ namespace Pal3.Core.DataReader.Cpk
                 throw new InvalidOperationException("Initialize the archive before accessing its content");
             }
 
-            if (!_crcToTableEntityMap.ContainsKey(fileVirtualPathCrcHash))
+            if (!_crcToTableEntityMap.TryGetValue(fileVirtualPathCrcHash, out CpkTableEntity entity))
             {
                 throw new FileNotFoundException(
                     $"File <{fileVirtualPathCrcHash}> does not exists in the archive");
             }
-
-            CpkTableEntity entity = _crcToTableEntityMap[fileVirtualPathCrcHash];
 
             if (entity.IsDirectory())
             {
@@ -210,7 +208,7 @@ namespace Pal3.Core.DataReader.Cpk
             }
             else
             {
-                using var stream = new FileStream(_filePath, FileMode.Open, FileAccess.Read);
+                using FileStream stream = new(_filePath, FileMode.Open, FileAccess.Read);
                 stream.Seek(entity.StartPos, SeekOrigin.Begin);
                 byte[] buffer = new byte[entity.PackedSize];
                 _ = stream.Read(buffer.AsSpan());

@@ -35,7 +35,7 @@ namespace Pal3.Game.Actor.Controllers
         ICommandExecutor<ActorSetYPositionCommand>,
         ICommandExecutor<ActorChangeScaleCommand>
     {
-        private Actor _actor;
+        private GameActor _actor;
         private ActorActionController _actionController;
         private ActorMovementController _movementController;
         private PlayerInputActions _inputActions;
@@ -64,7 +64,7 @@ namespace Pal3.Game.Actor.Controllers
             CommandExecutorRegistry<ICommand>.Instance.UnRegister(this);
         }
 
-        public void Init(Actor actor,
+        public void Init(GameActor actor,
             ActorActionController actionController,
             ActorMovementController movementController)
         {
@@ -90,7 +90,7 @@ namespace Pal3.Game.Actor.Controllers
             return _actor.GetScriptId() != ScriptConstants.InvalidScriptId;
         }
 
-        public Actor GetActor()
+        public GameActor GetActor()
         {
             return _actor;
         }
@@ -146,8 +146,8 @@ namespace Pal3.Game.Actor.Controllers
             if (_currentBehaviour == ActorBehaviourType.PathFollow &&
                 _actor.Info.Path.NumberOfWaypoints > 0)
             {
-                var waypoints = new Vector3[_actor.Info.Path.NumberOfWaypoints];
-                for (var i = 0; i < _actor.Info.Path.NumberOfWaypoints; i++)
+                Vector3[] waypoints = new Vector3[_actor.Info.Path.NumberOfWaypoints];
+                for (int i = 0; i < _actor.Info.Path.NumberOfWaypoints; i++)
                 {
                     waypoints[i] = _actor.Info.Path.GameBoxWaypoints[i].ToUnityPosition();
                 }
@@ -193,7 +193,7 @@ namespace Pal3.Game.Actor.Controllers
         {
             if (_actor.Id != command.ActorId) return;
             #if PAL3
-            var currentYAngles = Transform.EulerAngles.y;
+            float currentYAngles = Transform.EulerAngles.y;
             Transform.Rotation = Quaternion.Euler(0, currentYAngles - command.Degrees, 0);
             #elif PAL3A
             Transform.Rotation = Quaternion.Euler(0, - command.Degrees, 0);
@@ -250,7 +250,7 @@ namespace Pal3.Game.Actor.Controllers
         public void Execute(ActorChangeScaleCommand command)
         {
             if (command.ActorId != _actor.Id) return;
-            var waiter = new WaitUntilCanceled();
+            WaitUntilCanceled waiter = new();
             Pal3.Instance.Execute(new ScriptRunnerAddWaiterRequest(waiter));
             StartCoroutine(AnimateScaleAsync(command.Scale, 2f, () => waiter.CancelWait()));
         }

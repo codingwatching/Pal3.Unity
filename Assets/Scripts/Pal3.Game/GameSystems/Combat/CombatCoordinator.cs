@@ -9,7 +9,6 @@ namespace Pal3.Game.GameSystems.Combat
     using System.Collections.Generic;
     using System.Data;
     using System.Linq;
-    using Actor.Controllers;
     using Audio;
     using Command;
     using Command.Extensions;
@@ -18,13 +17,16 @@ namespace Pal3.Game.GameSystems.Combat
     using Core.Contract.Constants;
     using Core.Contract.Enums;
     using Core.DataReader.Nav;
+    using Core.DataReader.Scn;
     using Core.DataReader.Txt;
     using Core.Utilities;
     using Data;
     using Engine.Core.Abstraction;
     using Engine.Logging;
+    using Game.Actor;
+    using Game.Actor.Controllers;
+    using Game.Scene;
     using GamePlay;
-    using Scene;
     using Script.Waiter;
     using Settings;
     using State;
@@ -93,7 +95,7 @@ namespace Pal3.Game.GameSystems.Combat
         {
             if (!_gameSettings.IsTurnBasedCombatEnabled) return;
 
-            Scene currentScene = _sceneManager.GetCurrentScene();
+            GameScene currentScene = _sceneManager.GetCurrentScene();
 
             // Figure out which combat scene to use
             string combatSceneName = GetCombatSceneName(currentScene);
@@ -111,7 +113,7 @@ namespace Pal3.Game.GameSystems.Combat
             {
                 if (MusicConstants.CombatMusicInfo.TryGetValue(
                         currentScene.GetSceneInfo().CityName.ToLower(),
-                        out var combatMusic))
+                        out string combatMusic))
                 {
                     // Set music only if it's not set yet or it's not a script triggered combat
                     if (string.IsNullOrEmpty(_audioManager.GetCurrentScriptMusic()) ||
@@ -126,7 +128,7 @@ namespace Pal3.Game.GameSystems.Combat
             // if we are in cutscene state.
             if (_gameStateManager.GetCurrentState() == GameState.Cutscene)
             {
-                var combatWaiter = new WaitUntilCanceled();
+                WaitUntilCanceled combatWaiter = new();
                 Pal3.Instance.Execute(new ScriptRunnerAddWaiterRequest(combatWaiter));
                 _combatContextBuilder.WithScriptWaiter(combatWaiter);
             }
@@ -155,21 +157,21 @@ namespace Pal3.Game.GameSystems.Combat
             }
         }
 
-        private string GetCombatSceneName(Scene currentScene)
+        private string GetCombatSceneName(GameScene currentScene)
         {
-            var sceneInfo = currentScene.GetSceneInfo();
+            ScnSceneInfo sceneInfo = currentScene.GetSceneInfo();
 
             if (!_combatScnFile.CombatSceneMapInfo.TryGetValue($"{sceneInfo.CityName}_{sceneInfo.SceneName}",
-                    out var combatSceneFloorKindToMapInfo))
+                    out Dictionary<FloorType, string> combatSceneFloorKindToMapInfo))
             {
                 throw new DataException($"Combat scene not found for {sceneInfo.CityName}_{sceneInfo.SceneName}!");
             }
 
-            var floorType = FloorType.Default;
+            FloorType floorType = FloorType.Default;
 
             int actorId = _playerActorManager.GetPlayerActorId();
             IGameEntity playerActorEntity = currentScene.GetActorGameEntity(actorId);
-            var playerActorMovementController = playerActorEntity.GetComponent<ActorMovementController>();
+            ActorMovementController playerActorMovementController = playerActorEntity.GetComponent<ActorMovementController>();
             Vector2Int playerActorTilePosition = playerActorMovementController.GetTilePosition();
             int playerActorLayerIndex = playerActorMovementController.GetCurrentLayerIndex();
 
@@ -208,20 +210,20 @@ namespace Pal3.Game.GameSystems.Combat
             uint[] monsterIds = new uint[6];
 
             // Use each available ID at least once.
-            for (var i = 0; i < availableIds.Length; i++)
+            for (int i = 0; i < availableIds.Length; i++)
             {
                 monsterIds[i] = availableIds[i];
             }
 
             // Randomly select from available IDs to populate remaining monsterIds.
-            for (var i = availableIds.Length; i < command.NumberOfMonster; i++)
+            for (int i = availableIds.Length; i < command.NumberOfMonster; i++)
             {
                 int randomIndex = RandomGenerator.Range(0, availableIds.Length);
                 monsterIds[i] = availableIds[randomIndex];
             }
 
             // Shuffle the array
-            for (var i = 0; i < monsterIds.Length; i++)
+            for (int i = 0; i < monsterIds.Length; i++)
             {
                 int randomIndex = RandomGenerator.Range(i, monsterIds.Length);
                 (monsterIds[i], monsterIds[randomIndex]) = (monsterIds[randomIndex], monsterIds[i]);
@@ -317,18 +319,18 @@ namespace Pal3.Game.GameSystems.Combat
             {
                 Pal3.Instance.Execute(new ActorStopActionAndStandCommand(ActorConstants.PlayerActorVirtualID));
 
-                var currentScene = _sceneManager.GetCurrentScene();
-                var combatActor = currentScene.GetActor(command.CombatActorId);
-                var playerTransform = currentScene.GetActorGameEntity(command.PlayerActorId).Transform;
-                var enemyTransform = currentScene.GetActorGameEntity(command.CombatActorId).Transform;
+                GameScene currentScene = _sceneManager.GetCurrentScene();
+                GameActor gameActor = currentScene.GetActor(command.CombatActorId);
+                ITransform playerTransform = currentScene.GetActorGameEntity(command.PlayerActorId).Transform;
+                ITransform enemyTransform = currentScene.GetActorGameEntity(command.CombatActorId).Transform;
 
                 _combatContextBuilder.WithMeetType(CalculateMeetType(playerTransform, enemyTransform));
 
                 Execute(new CombatEnterNormalFightCommand(
-                    combatActor.Info.NumberOfMonsters,
-                    combatActor.Info.MonsterIds[0],
-                    combatActor.Info.MonsterIds[1],
-                    combatActor.Info.MonsterIds[2]));
+                    gameActor.Info.NumberOfMonsters,
+                    gameActor.Info.MonsterIds[0],
+                    gameActor.Info.MonsterIds[1],
+                    gameActor.Info.MonsterIds[2]));
             }
             else // TODO: Remove once combat system is fully implemented
             {

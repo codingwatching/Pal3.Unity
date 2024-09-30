@@ -45,7 +45,7 @@ namespace Pal3.Game.Scene
         protected (CvdFile CvdFile, ITextureResourceProvider TextureProvider)? SceneCvdMesh;
 
         protected readonly Dictionary<int, SceneObject> SceneObjects = new ();
-        protected readonly Dictionary<int, Actor> Actors = new ();
+        protected readonly Dictionary<int, GameActor> Actors = new ();
 
         private HashSet<int> _sceneObjectIdsToNotLoadFromSaveState;
 
@@ -107,9 +107,9 @@ namespace Pal3.Game.Scene
 
         private void InitMeshData()
         {
-            var separator = CpkConstants.DirectorySeparatorChar;
+            char separator = CpkConstants.DirectorySeparatorChar;
 
-            var meshFileRelativePath = $"{ScnFile.SceneInfo.CityName}{CpkConstants.FileExtension}{separator}" +
+            string meshFileRelativePath = $"{ScnFile.SceneInfo.CityName}{CpkConstants.FileExtension}{separator}" +
                                    $"{ScnFile.SceneInfo.Model}{separator}";
 
             // Switch to night version of the mesh model when LightMap flag is set to 1
@@ -118,7 +118,7 @@ namespace Pal3.Game.Scene
                 meshFileRelativePath += $"1{separator}";
             }
 
-            var sceneMetadataFilePrefix = meshFileRelativePath + ScnFile.SceneInfo.Model;
+            string sceneMetadataFilePrefix = meshFileRelativePath + ScnFile.SceneInfo.Model;
 
             ITextureResourceProvider sceneTextureProvider = _resourceProvider.CreateTextureResourceProvider(
                 CoreUtility.GetDirectoryName(sceneMetadataFilePrefix, separator));
@@ -178,14 +178,14 @@ namespace Pal3.Game.Scene
         {
             foreach (ScnNpcInfo npcInfo in ScnFile.NpcInfos)
             {
-                Actors[npcInfo.Id] = new Actor(_resourceProvider, npcInfo);
+                Actors[npcInfo.Id] = new GameActor(_resourceProvider, npcInfo);
             }
 
             foreach (ScnNpcInfo playerInfo in NpcInfoFactory.CreateAllPlayerActorNpcInfos())
             {
                 if (!Actors.ContainsKey(playerInfo.Id))
                 {
-                    Actors[playerInfo.Id] = new Actor(_resourceProvider, playerInfo);
+                    Actors[playerInfo.Id] = new GameActor(_resourceProvider, playerInfo);
                 }
             }
 
@@ -194,7 +194,7 @@ namespace Pal3.Game.Scene
             {
                 if (!Actors.ContainsKey(fengYaSongInfo.Id))
                 {
-                    Actors[fengYaSongInfo.Id] = new Actor(_resourceProvider, fengYaSongInfo);
+                    Actors[fengYaSongInfo.Id] = new GameActor(_resourceProvider, fengYaSongInfo);
                 }
             }
             #endif

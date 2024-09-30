@@ -6,6 +6,7 @@
 namespace Pal3.Game.Input
 {
     using System;
+    using System.Linq;
     using Command;
     using Command.Extensions;
     using Core.Command;
@@ -25,6 +26,9 @@ namespace Pal3.Game.Input
             // Goto initial state
             SwitchCurrentActionMap(GameState.UI);
 
+            // Disable unsupported devices
+            DisableUnsupportedDevices();
+            
             InputSystem.onActionChange += OnInputActionChange;
         }
 
@@ -47,7 +51,7 @@ namespace Pal3.Game.Input
         {
             if (change == InputActionChange.ActionPerformed)
             {
-                var inputAction = (InputAction) action;
+                InputAction inputAction = (InputAction) action;
                 InputControl lastControl = inputAction.activeControl;
                 if (_lastActiveInputDevice != lastControl.device)
                 {
@@ -73,6 +77,20 @@ namespace Pal3.Game.Input
             };
 
             inputActionMap?.Enable();
+        }
+
+        private void DisableUnsupportedDevices()
+        {
+            // Disable all devices that are not supported
+            // Especially for controllers that are used for flight simulation and racing games
+            foreach (InputDevice device in 
+                     InputSystem.devices.Where(device => device.name.StartsWith("Thrustmaster") ||
+                                                         device.name.StartsWith("Thustmaster") ||
+                                                         device.name.StartsWith("Winwing")))
+            {
+                // Disable the device
+                InputSystem.DisableDevice(device);
+            }
         }
 
         public void DisablePlayerInput()

@@ -120,19 +120,19 @@ namespace Pal3.Game.Effect
         #if PAL3A
         private void HandleNanGongHuangTransformEffect(EffectAttachToActorCommand effectAttachToActorCommand,
             EffectPlayCommand effectPlayCommand,
-            Scene currentScene)
+            GameScene currentScene)
         {
-            var actorId = effectAttachToActorCommand.ActorId;
+            int actorId = effectAttachToActorCommand.ActorId;
             switch (effectPlayCommand.EffectGroupId)
             {
                 // 南宫煌切换为狼妖形态特效
                 case 164:
                 {
-                    Actor actor = currentScene.GetActor(actorId);
+                    GameActor actor = currentScene.GetActor(actorId);
                     actor.ChangeName(ActorConstants.NanGongHuangWolfModeActorName);
                     if (actor.IsActive)
                     {
-                        var actorActionController = currentScene.GetActorGameEntity(actorId)
+                        ActorActionController actorActionController = currentScene.GetActorGameEntity(actorId)
                             .GetComponent<ActorActionController>();
                         actorActionController.PerformAction(actor.GetIdleAction(), overwrite: true);
                     }
@@ -141,11 +141,11 @@ namespace Pal3.Game.Effect
                 // 南宫煌切换为人形态特效
                 case 315:
                 {
-                    Actor actor = currentScene.GetActor(actorId);
+                    GameActor actor = currentScene.GetActor(actorId);
                     actor.ChangeName(ActorConstants.NanGongHuangHumanModeActorName);
                     if (actor.IsActive)
                     {
-                        var actorActionController = currentScene.GetActorGameEntity(actorId)
+                        ActorActionController actorActionController = currentScene.GetActorGameEntity(actorId)
                             .GetComponent<ActorActionController>();
                         actorActionController.PerformAction(actor.GetIdleAction(), overwrite: true);
                     }

@@ -13,7 +13,6 @@ namespace Pal3.Game.Actor
     using Dev.Presenters;
     using Engine.Core.Abstraction;
     using Engine.Core.Implementation;
-    using GameSystems.Combat;
     using Scene;
 
     using Color = Core.Primitives.Color;
@@ -22,7 +21,7 @@ namespace Pal3.Game.Actor
     public static class ActorFactory
     {
         public static IGameEntity CreateActorGameEntity(GameResourceProvider resourceProvider,
-            Actor actor,
+            GameActor actor,
             Tilemap tilemap,
             bool isDropShadowEnabled,
             Color tintColor,
@@ -31,11 +30,11 @@ namespace Pal3.Game.Actor
             float movementMaxYDifferentialCrossPlatform,
             Func<int, int[], HashSet<Vector2Int>> getAllActiveActorBlockingTilePositions)
         {
-            var actorGameEntity = GameEntityFactory.Create($"Actor_{actor.Id}_{actor.Name}");
+            IGameEntity actorGameEntity = GameEntityFactory.Create($"Actor_{actor.Id}_{actor.Name}");
 
             // Attach ScnNpcInfo to the GameEntity for better debuggability
             #if UNITY_EDITOR
-            var npcInfoPresent = actorGameEntity.AddComponent<NpcInfoPresenter>();
+            NpcInfoPresenter npcInfoPresent = actorGameEntity.AddComponent<NpcInfoPresenter>();
             npcInfoPresent.npcInfo = actor.Info;
             #endif
 
@@ -46,8 +45,8 @@ namespace Pal3.Game.Actor
             {
                 case ActorAnimationType.Vertex:
                 {
-                    var autoStand = actor.Info.InitBehaviour != ActorBehaviourType.Hold;
-                    var canPerformHoldAnimation = actor.Info is {InitBehaviour: ActorBehaviourType.Hold, LoopAction: 0};
+                    bool autoStand = actor.Info.InitBehaviour != ActorBehaviourType.Hold;
+                    bool canPerformHoldAnimation = actor.Info is {InitBehaviour: ActorBehaviourType.Hold, LoopAction: 0};
                     VertexAnimationActorActionController vertexActionController =
                         actorGameEntity.AddComponent<VertexAnimationActorActionController>();
                     vertexActionController.Init(resourceProvider,
@@ -76,7 +75,7 @@ namespace Pal3.Game.Actor
                     throw new NotSupportedException($"Unsupported actor animation type: {actor.AnimationType}");
             }
 
-            var movementController = actorGameEntity.AddComponent<ActorMovementController>();
+            ActorMovementController movementController = actorGameEntity.AddComponent<ActorMovementController>();
             movementController.Init(actor,
                 tilemap,
                 actionController,
@@ -85,7 +84,7 @@ namespace Pal3.Game.Actor
                 movementMaxYDifferentialCrossPlatform,
                 getAllActiveActorBlockingTilePositions);
 
-            var actorController = actorGameEntity.AddComponent<ActorController>();
+            ActorController actorController = actorGameEntity.AddComponent<ActorController>();
             actorController.Init(actor, actionController, movementController);
 
             // Attach additional controller(s) to special actor
@@ -107,57 +106,6 @@ namespace Pal3.Game.Actor
                     break;
             }
             #endif
-
-            return actorGameEntity;
-        }
-
-        public static IGameEntity CreateCombatActorGameEntity(GameResourceProvider resourceProvider,
-            CombatActor actor,
-            ElementPosition elementPosition,
-            bool isDropShadowEnabled)
-        {
-            IGameEntity actorGameEntity = GameEntityFactory.Create($"CombatActor_{actor.Id}_{actor.Name}");
-
-            // Attach CombatActorInfo to the GameEntity for better debuggability
-            #if UNITY_EDITOR
-            var combatActorInfoPresent = actorGameEntity.AddComponent<CombatActorInfoPresenter>();
-            combatActorInfoPresent.combatActorInfo = actor.Info;
-            #endif
-
-            ActorActionController actionController;
-            switch (actor.AnimationType)
-            {
-                case ActorAnimationType.Vertex:
-                {
-                    VertexAnimationActorActionController vertexActionController =
-                        actorGameEntity.AddComponent<VertexAnimationActorActionController>();
-                    vertexActionController.Init(resourceProvider,
-                        actor,
-                        hasColliderAndRigidBody: false, // combat actor has no collider and rigidbody
-                        isDropShadowEnabled,
-                        autoStand: true, // combat actor always auto stand
-                        canPerformHoldAnimation: false); // combat actor can't perform hold animation
-                    actionController = vertexActionController;
-                    break;
-                }
-                case ActorAnimationType.Skeletal:
-                {
-                    SkeletalAnimationActorActionController skeletalActionController =
-                        actorGameEntity.AddComponent<SkeletalAnimationActorActionController>();
-                    skeletalActionController.Init(resourceProvider,
-                        actor,
-                        hasColliderAndRigidBody: false, // combat actor has no collider and rigidbody
-                        isDropShadowEnabled);
-                    actionController = skeletalActionController;
-                    break;
-                }
-                default:
-                    throw new NotSupportedException($"Unsupported actor animation type: {actor.AnimationType}");
-            }
-
-            var actorController = actorGameEntity.AddComponent<CombatActorController>();
-            actorController.Init(actor, actionController, elementPosition);
-            actorController.IsActive = true; // combat actor is always active
 
             return actorGameEntity;
         }

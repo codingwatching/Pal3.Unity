@@ -29,6 +29,7 @@ namespace Pal3.Game.Rendering.Renderer
     public sealed class Mv3ModelRenderer : GameEntityScript, IDisposable
     {
         public event EventHandler<int> AnimationLoopPointReached;
+        public event EventHandler<string> AnimationEventTriggered;
 
         private const string MV3_ANIMATION_HOLD_EVENT_NAME = "hold";
         private const string MV3_MODEL_DEFAULT_TEXTURE_EXTENSION = ".tga";
@@ -62,6 +63,7 @@ namespace Pal3.Game.Rendering.Renderer
         public bool IsInitialized { get; private set; }
         private bool _isActionInHoldState;
         private uint _actionHoldingTick;
+        private int _lastCheckedTick = -1; // Track the last checked tick
         private CancellationTokenSource _animationCts;
 
         protected override void OnEnableGameEntity()
@@ -121,7 +123,7 @@ namespace Pal3.Game.Rendering.Renderer
                 }
             }
 
-            for (var i = 0; i < _tagNodesInfo.Length; i++)
+            for (int i = 0; i < _tagNodesInfo.Length; i++)
             {
                 Mv3TagFrame[] tagFrames = _tagNodesInfo[i].TagFrames;
                 int tagFramesCount = tagFrames.Length;
@@ -137,10 +139,10 @@ namespace Pal3.Game.Rendering.Renderer
                 }
             }
 
-            for (var i = 0; i < _meshCount; i++)
+            for (int i = 0; i < _meshCount; i++)
             {
                 Mv3Mesh mesh = mv3File.Meshes[i];
-                var materialId = mesh.Attributes[0].MaterialId;
+                int materialId = mesh.Attributes[0].MaterialId;
                 GameBoxMaterial material = mv3File.Materials[materialId];
 
                 InitSubMeshes(i, ref mesh, ref material);
@@ -148,7 +150,7 @@ namespace Pal3.Game.Rendering.Renderer
 
             if (_tagNodePolFile != null)
             {
-                for (var i = 0; i < _tagNodesInfo.Length; i++)
+                for (int i = 0; i < _tagNodesInfo.Length; i++)
                 {
                     if (_tagNodesInfo[i].Name.Equals("tag_weapon3", StringComparison.OrdinalIgnoreCase))
                     {
@@ -159,7 +161,7 @@ namespace Pal3.Game.Rendering.Renderer
                     _tagNodes[i] = GameEntityFactory.Create(_tagNodePolFile.NodeDescriptions[0].Name,
                         GameEntity, worldPositionStays: true);
 
-                    var tagNodeRenderer = _tagNodes[i].AddComponent<PolyModelRenderer>();
+                    PolyModelRenderer tagNodeRenderer = _tagNodes[i].AddComponent<PolyModelRenderer>();
                     tagNodeRenderer.Render(_tagNodePolFile,
                         tagNodeTextureProvider,
                         _materialManager,
@@ -181,14 +183,14 @@ namespace Pal3.Game.Rendering.Renderer
             ref Mv3Mesh mv3Mesh,
             ref GameBoxMaterial material)
         {
-            var textureName = material.TextureFileNames[0];
+            string textureName = material.TextureFileNames[0];
 
             _gbMaterials[index] = material;
-            _textures[index] = _textureProvider.GetTexture(textureName, out var hasAlphaChannel);
+            _textures[index] = _textureProvider.GetTexture(textureName, out bool hasAlphaChannel);
             _textureHasAlphaChannel[index]= hasAlphaChannel;
             _animationName[index] = mv3Mesh.Name;
 
-            var keyFrames = mv3Mesh.KeyFrames;
+            Mv3AnimationKeyFrame[] keyFrames = mv3Mesh.KeyFrames;
             int keyFramesCount = keyFrames.Length;
 
             if (_frameTicks[index] == null || _frameTicks[index].Length != keyFramesCount)
@@ -206,14 +208,14 @@ namespace Pal3.Game.Rendering.Renderer
 
             // Attach BlendFlag and GameBoxMaterial to the GameEntity for better debuggability
             #if UNITY_EDITOR
-            var materialInfoPresenter = _meshEntities[index].AddComponent<MaterialInfoPresenter>();
+            MaterialInfoPresenter materialInfoPresenter = _meshEntities[index].AddComponent<MaterialInfoPresenter>();
             materialInfoPresenter.blendFlag = _textureHasAlphaChannel[index] ?
                 GameBoxBlendFlag.AlphaBlend :
                 GameBoxBlendFlag.Opaque;
             materialInfoPresenter.material = _gbMaterials[index];
             #endif
 
-            var meshRenderer = _meshEntities[index].AddComponent<StaticMeshRenderer>();
+            StaticMeshRenderer meshRenderer = _meshEntities[index].AddComponent<StaticMeshRenderer>();
 
             IMaterial[] materials = _materialManager.CreateStandardMaterials(
                 RendererType.Mv3,
@@ -226,7 +228,7 @@ namespace Pal3.Game.Rendering.Renderer
 
             #if PAL3A
             // Apply PAL3A texture scaling/tiling fix
-            var texturePath = _textureProvider.GetTexturePath(textureName);
+            string texturePath = _textureProvider.GetTexturePath(textureName);
             if (Dev.TexturePatcher.TextureFileHasWrongTiling(texturePath))
             {
                 _materials[index][0].SetMainTextureScale(1f, -1f);
@@ -311,7 +313,7 @@ namespace Pal3.Game.Rendering.Renderer
                 return new Bounds(Transform.Position, Vector3.one);
             }
             Bounds bounds = _renderMeshComponents[0].MeshRenderer.GetRendererBounds();
-            for (var i = 1; i < _renderMeshComponents.Length; i++)
+            for (int i = 1; i < _renderMeshComponents.Length; i++)
             {
                 bounds.Encapsulate(_renderMeshComponents[i].MeshRenderer.GetRendererBounds());
             }
@@ -325,7 +327,7 @@ namespace Pal3.Game.Rendering.Renderer
                 return new Bounds(Vector3.zero, Vector3.one);
             }
             Bounds bounds = _renderMeshComponents[0].MeshRenderer.GetMeshBounds();
-            for (var i = 1; i < _renderMeshComponents.Length; i++)
+            for (int i = 1; i < _renderMeshComponents.Length; i++)
             {
                 bounds.Encapsulate(_renderMeshComponents[i].MeshRenderer.GetMeshBounds());
             }
@@ -361,46 +363,58 @@ namespace Pal3.Game.Rendering.Renderer
         private IEnumerator PlayAnimationInternalAsync(int loopCount,
             CancellationToken cancellationToken)
         {
-            uint startTick = 0;
+            const uint startTick = 0;
 
-            if (loopCount == -1) // Infinite loop until cancelled
+            switch (loopCount)
             {
-                while (!cancellationToken.IsCancellationRequested)
+                // Infinite loop until cancelled
+                case -1:
                 {
-                    yield return PlayOneTimeAnimationInternalAsync(startTick, _totalGameBoxTicks, cancellationToken);
+                    while (!cancellationToken.IsCancellationRequested)
+                    {
+                        yield return PlayOneTimeAnimationInternalAsync(startTick, _totalGameBoxTicks, cancellationToken);
+                        if (!cancellationToken.IsCancellationRequested)
+                        {
+                            AnimationLoopPointReached?.Invoke(this, loopCount);
+                        }
+                    }
+
+                    break;
+                }
+                // Finite loop
+                case > 0:
+                {
+                    while (!cancellationToken.IsCancellationRequested && --loopCount >= 0)
+                    {
+                        yield return PlayOneTimeAnimationInternalAsync(startTick, _totalGameBoxTicks, cancellationToken);
+                        if (!cancellationToken.IsCancellationRequested)
+                        {
+                            AnimationLoopPointReached?.Invoke(this, loopCount);
+                        }
+                    }
+
+                    break;
+                }
+                // Play until action holding point
+                case -2:
+                {
+                    if (TryGetLastHoldingTick(out uint holdingTick))
+                    {
+                        _actionHoldingTick = holdingTick;
+                        yield return PlayOneTimeAnimationInternalAsync(startTick, _actionHoldingTick, cancellationToken);
+                        _isActionInHoldState = true;
+                    }
+                    else
+                    {
+                        yield return PlayOneTimeAnimationInternalAsync(startTick, _totalGameBoxTicks, cancellationToken);
+                    }
+
                     if (!cancellationToken.IsCancellationRequested)
                     {
                         AnimationLoopPointReached?.Invoke(this, loopCount);
                     }
-                }
-            }
-            else if (loopCount > 0)
-            {
-                while (!cancellationToken.IsCancellationRequested && --loopCount >= 0)
-                {
-                    yield return PlayOneTimeAnimationInternalAsync(startTick, _totalGameBoxTicks, cancellationToken);
-                    if (!cancellationToken.IsCancellationRequested)
-                    {
-                        AnimationLoopPointReached?.Invoke(this, loopCount);
-                    }
-                }
-            }
-            else if (loopCount == -2) // Play until action holding point
-            {
-                if (TryGetLastHoldingTick(out uint holdingTick))
-                {
-                    _actionHoldingTick = holdingTick;
-                    yield return PlayOneTimeAnimationInternalAsync(startTick, _actionHoldingTick, cancellationToken);
-                    _isActionInHoldState = true;
-                }
-                else
-                {
-                    yield return PlayOneTimeAnimationInternalAsync(startTick, _totalGameBoxTicks, cancellationToken);
-                }
 
-                if (!cancellationToken.IsCancellationRequested)
-                {
-                    AnimationLoopPointReached?.Invoke(this, loopCount);
+                    break;
                 }
             }
         }
@@ -409,7 +423,7 @@ namespace Pal3.Game.Rendering.Renderer
         {
             for (int i = _events.Length - 1; i >= 0; i--)
             {
-                var currentEvent = _events[i];
+                Mv3AnimationEvent currentEvent = _events[i];
                 if (currentEvent.Name.Equals(MV3_ANIMATION_HOLD_EVENT_NAME, StringComparison.OrdinalIgnoreCase))
                 {
                     holdingTick = currentEvent.GameBoxTick;
@@ -421,16 +435,36 @@ namespace Pal3.Game.Rendering.Renderer
             return false;
         }
 
+        private void CheckForAnimationEvents(uint currentTick)
+        {
+            foreach (Mv3AnimationEvent animationEvent in _events)
+            {
+                if (animationEvent.GameBoxTick > _lastCheckedTick && animationEvent.GameBoxTick <= currentTick)
+                {
+                    AnimationEventTriggered?.Invoke(this, animationEvent.Name);
+                    break;
+                }
+            }
+            
+            _lastCheckedTick = (int)currentTick;
+        }
+
         private IEnumerator PlayOneTimeAnimationInternalAsync(uint startTick,
             uint endTick,
             CancellationToken cancellationToken)
         {
-            var startTime = GameTimeProvider.Instance.TimeSinceStartup;
+            double startTime = GameTimeProvider.Instance.TimeSinceStartup;
+            _lastCheckedTick = -1;
+
+            CheckForAnimationEvents(startTick); // In case the startTick is an event tick
 
             while (!cancellationToken.IsCancellationRequested)
             {
                 uint tick = ((float)(GameTimeProvider.Instance.TimeSinceStartup - startTime)).SecondsToGameBoxTick() + startTick;
 
+                // Trigger animation events
+                CheckForAnimationEvents(tick);
+                
                 if (tick >= endTick)
                 {
                     yield break;
@@ -445,21 +479,21 @@ namespace Pal3.Game.Rendering.Renderer
                 if (cancellationToken.IsCancellationRequested) yield break;
 
                 // Animates the mesh
-                for (var i = 0; i < _meshCount; i++)
+                for (int i = 0; i < _meshCount; i++)
                 {
                     RenderMeshComponent meshComponent = _renderMeshComponents[i];
 
-                    var frameTicks = _frameTicks[i];
+                    uint[] frameTicks = _frameTicks[i];
 
-                    var currentFrameIndex = CoreUtility.GetFloorIndex(frameTicks, tick);
-                    var currentFrameTick = _frameTicks[i][currentFrameIndex];
-                    var nextFrameIndex = currentFrameIndex < frameTicks.Length - 1 ? currentFrameIndex + 1 : 0;
-                    var nextFrameTick = nextFrameIndex == 0 ? endTick : _frameTicks[i][nextFrameIndex];
+                    int currentFrameIndex = CoreUtility.GetFloorIndex(frameTicks, tick);
+                    uint currentFrameTick = _frameTicks[i][currentFrameIndex];
+                    int nextFrameIndex = currentFrameIndex < frameTicks.Length - 1 ? currentFrameIndex + 1 : 0;
+                    uint nextFrameTick = nextFrameIndex == 0 ? endTick : _frameTicks[i][nextFrameIndex];
 
-                    var influence = (float)(tick - currentFrameTick) / (nextFrameTick - currentFrameTick);
+                    float influence = (float)(tick - currentFrameTick) / (nextFrameTick - currentFrameTick);
 
-                    var vertices = meshComponent.MeshDataBuffer.VertexBuffer;
-                    for (var j = 0; j < vertices.Length; j++)
+                    Vector3[] vertices = meshComponent.MeshDataBuffer.VertexBuffer;
+                    for (int j = 0; j < vertices.Length; j++)
                     {
                         vertices[j] = Vector3.Lerp(
                             _meshes[i].KeyFrames[currentFrameIndex].GameBoxVertices[j]
@@ -475,18 +509,18 @@ namespace Pal3.Game.Rendering.Renderer
                 // Animates the tag nodes
                 if (_tagNodePolFile != null)
                 {
-                    for (var i = 0; i < _tagNodesInfo.Length; i++)
+                    for (int i = 0; i < _tagNodesInfo.Length; i++)
                     {
                         if (_tagNodes[i] == null) continue;
 
-                        var frameTicks = _tagNodeFrameTicks[i];
+                        uint[] frameTicks = _tagNodeFrameTicks[i];
 
-                        var currentFrameIndex = CoreUtility.GetFloorIndex(frameTicks, tick);
-                        var currentFrameTick = _tagNodeFrameTicks[i][currentFrameIndex];
-                        var nextFrameIndex = currentFrameIndex < frameTicks.Length - 1 ? currentFrameIndex + 1 : 0;
-                        var nextFrameTick = nextFrameIndex == 0 ? endTick : _tagNodeFrameTicks[i][nextFrameIndex];
+                        int currentFrameIndex = CoreUtility.GetFloorIndex(frameTicks, tick);
+                        uint currentFrameTick = _tagNodeFrameTicks[i][currentFrameIndex];
+                        int nextFrameIndex = currentFrameIndex < frameTicks.Length - 1 ? currentFrameIndex + 1 : 0;
+                        uint nextFrameTick = nextFrameIndex == 0 ? endTick : _tagNodeFrameTicks[i][nextFrameIndex];
 
-                        var influence = (float)(tick - currentFrameTick) / (nextFrameTick - currentFrameTick);
+                        float influence = (float)(tick - currentFrameTick) / (nextFrameTick - currentFrameTick);
 
                         Vector3 position = Vector3.Lerp(
                             _tagNodesInfo[i].TagFrames[currentFrameIndex].GameBoxPosition.ToUnityPosition(),
@@ -527,7 +561,7 @@ namespace Pal3.Game.Rendering.Renderer
             {
                 foreach (RenderMeshComponent renderMeshComponent in _renderMeshComponents)
                 {
-                    var materials = renderMeshComponent.MeshRenderer.GetMaterials();
+                    IMaterial[] materials = renderMeshComponent.MeshRenderer.GetMaterials();
                     if (materials != null)
                     {
                         #if PAL3A
